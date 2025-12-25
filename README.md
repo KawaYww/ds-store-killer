@@ -85,12 +85,24 @@ Recursive mode doesn't cache — can't reliably detect subdirectory changes, so 
 
 ## Watch Mode
 
-Watch directories and auto-delete new `.DS_Store` as they appear:
+Watch directories and auto-delete `.DS_Store` files instantly.
+
+**Behavior:**
+1. **Initial Scan**: Performs a full scan and cleanup on startup.
+2. **Real-time**: Uses macOS FSEvents to monitor changes efficiently.
+3. **Non-interactive**: Automatically deletes files without asking.
+4. **Git Safety**:
+    - **Default**: Skips git-tracked `.DS_Store` files (logs a warning).
+    - **`--force`**: Auto-deletes **ALL** `.DS_Store` files, including git-tracked ones.
+
+> **Note**: Unlike `kill` mode where `--force` just *allows* deletion (with confirmation), in `watch` mode `--force` means **aggressive auto-deletion** of tracked `.DS_Store` files.
 
 ```bash
 dsk watch                # current dir
 dsk watch ~/Desktop      # specific dir
 dsk watch . -e .git      # with exclusions
+dsk watch --notify       # send macOS notification on delete
+dsk watch --force        # DANGER: auto-delete git-tracked .DS_Store files too
 ```
 
 Runs in foreground, Ctrl+C to stop.
@@ -108,7 +120,7 @@ dsk service stop
 dsk service uninstall
 ```
 
-Uses kqueue — watching 10 dirs costs the same as watching 1.
+Uses **FSEvents** (via `notify` crate) — watching deep directory trees is efficient and doesn't consume file descriptors per subdirectory (solving `os error 24`).
 
 Logs: `/tmp/dsk.out.log`, `/tmp/dsk.err.log`
 
@@ -129,11 +141,13 @@ dsk kill [OPTIONS] [PATH]
   -y, --yes          Skip confirmation
   -n, --dry-run      Scan only, don't delete
   -q, --quiet        Don't list each file
-      --force        Allow deleting git-tracked files
+      --force        Allow deleting git-tracked .DS_Store files
       --stats        Show timing
 
 dsk watch [PATH]
   -e, --exclude      Exclude patterns
+      --notify       Send macOS notification on delete
+      --force        Wait mode: Delete git-tracked .DS_Store files too
 
 dsk service <install|uninstall|start|stop|status>
 ```

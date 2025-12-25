@@ -22,7 +22,7 @@ strip = true
 [dependencies]
 jwalk = "0.8"
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage", "error-context", "color"] }
-notify = { version = "7", default-features = false, features = ["macos_kqueue"] }
+notify = { version = "7", default-features = false, features = ["macos_fsevent"] }
 colored = { version = "2", default-features = false }
 shellexpand = { version = "3", default-features = false, features = ["base-0", "tilde"] }
 

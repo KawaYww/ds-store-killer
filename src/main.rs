@@ -17,7 +17,7 @@ fn main() {
 
     match cli.command {
         Commands::Kill { args } => run_kill(args),
-        Commands::Watch { path, exclude } => run_watch(&path, exclude),
+        Commands::Watch { path, exclude, notify, force } => run_watch(&path, exclude, notify, force),
         Commands::Service { action } => run_service(action),
     }
 }
@@ -139,7 +139,7 @@ fn run_kill(args: KillArgs) {
     }
 }
 
-fn run_watch(path: &std::path::Path, exclude: Vec<String>) {
+fn run_watch(path: &std::path::Path, exclude: Vec<String>, notify: bool, force: bool) {
     let path = shellexpand::tilde(&path.to_string_lossy()).to_string();
     let path = Path::new(&path);
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -149,7 +149,7 @@ fn run_watch(path: &std::path::Path, exclude: Vec<String>) {
         std::process::exit(1);
     }
 
-    if let Err(e) = watcher::run(&[path.as_path()], exclude) {
+    if let Err(e) = watcher::run(&[path.as_path()], exclude, notify, force) {
         log::error(&e);
         std::process::exit(1);
     }

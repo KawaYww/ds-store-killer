@@ -40,7 +40,7 @@ pub struct KillArgs {
     #[arg(long)]
     pub stats: bool,
 
-    /// Force delete git-tracked files (default: skip them)
+    /// Force delete git-tracked .DS_Store files (default: skip them)
     #[arg(long)]
     pub force: bool,
 }
@@ -63,6 +63,14 @@ pub enum Commands {
         /// Exclude patterns
         #[arg(short, long)]
         exclude: Vec<String>,
+
+        /// Send macOS notification on delete
+        #[arg(long)]
+        notify: bool,
+
+        /// Force delete git-tracked .DS_Store files
+        #[arg(long)]
+        force: bool,
     },
 
     /// Manage launchd service
