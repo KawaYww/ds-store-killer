@@ -12,7 +12,7 @@
 - Dry-run mode (`-n`)
 - Git safety — skips tracked files by default, `--force` to override
 - Recursive or single-dir
-- Daemon mode with `--serve`
+- Watch mode with `dsk watch`
 - launchd service for auto-start on boot
 - Exclude patterns (`-e node_modules -e .git`)
 - Fast parallel scanning via `jwalk`
@@ -43,14 +43,16 @@ cargo build --release
 ## Usage
 
 ```bash
-dsk                      # current dir, asks before deleting
-dsk -y                   # just delete, don't ask
-dsk -n                   # dry-run, scan only
-dsk -r ~/Projects        # recursive
-dsk -r --force ~/repo    # include git-tracked files
-dsk -ry --stats .        # recursive, no confirm, show timing
-dsk -ry -e node_modules  # exclude pattern
-dsk --serve ~/Desktop    # daemon, auto-kill new ones
+dsk kill                      # current dir, asks before deleting
+dsk kill -y                   # just delete, don't ask
+dsk kill -n                   # dry-run, scan only
+dsk kill -r ~/Projects        # recursive
+dsk kill -r --force ~/repo    # include git-tracked files
+dsk kill -ry --stats .        # recursive, no confirm, show timing
+dsk kill -ry -e node_modules  # exclude pattern
+
+dsk watch ~/Desktop           # watch and auto-delete
+dsk watch . -e .git           # watch with exclusions
 ```
 
 ## Git Safety
@@ -63,9 +65,9 @@ Deleting git-tracked `.DS_Store` messes up your commit history. By default, `dsk
 | `--force` | Includes them (still asks for confirmation) |
 
 ```bash
-dsk -r ~/my-repo           # skips tracked files
-dsk -r --force ~/my-repo   # includes them, still confirms
-dsk -ry --force ~/my-repo  # includes them, no confirmation
+dsk kill -r ~/my-repo           # skips tracked files
+dsk kill -r --force ~/my-repo   # includes them, still confirms
+dsk kill -ry --force ~/my-repo  # includes them, no confirmation
 ```
 
 Why would `.DS_Store` be tracked?
@@ -73,20 +75,22 @@ Why would `.DS_Store` be tracked?
 - Force-added with `git add -f`
 - `.gitignore` was added after the fact
 
+> **Note**: Git safety requires `git` to be installed. If git is not found, `dsk` will warn and proceed without the safety check.
+
 ## Cache
 
 Non-recursive scans are cached in `$TMPDIR/dsk-cache/`. Auto-invalidates when directory changes.
 
 Recursive mode doesn't cache — can't reliably detect subdirectory changes, so we rescan every time.
 
-## Daemon Mode
+## Watch Mode
 
 Watch directories and auto-delete new `.DS_Store` as they appear:
 
 ```bash
-dsk --serve              # current dir
-dsk --serve ~/Desktop    # specific dir
-dsk --serve . -e .git    # with exclusions
+dsk watch                # current dir
+dsk watch ~/Desktop      # specific dir
+dsk watch . -e .git      # with exclusions
 ```
 
 Runs in foreground, Ctrl+C to stop.
@@ -111,25 +115,27 @@ Logs: `/tmp/dsk.out.log`, `/tmp/dsk.err.log`
 ## CLI Reference
 
 ```
-Usage: dsk [OPTIONS] [PATH] [COMMAND]
+Usage: dsk <COMMAND>
 
 Commands:
+  kill     Kill .DS_Store files
+  watch    Watch directory and auto-delete
   service  Manage launchd service
+  help     Print help
 
-Arguments:
-  [PATH]  Target directory [default: .]
-
-Options:
+dsk kill [OPTIONS] [PATH]
   -r, --recursive    Recursive deletion
+  -e, --exclude      Exclude patterns
   -y, --yes          Skip confirmation
   -n, --dry-run      Scan only, don't delete
   -q, --quiet        Don't list each file
-  -e, --exclude      Exclude patterns
       --force        Allow deleting git-tracked files
-      --serve        Daemon mode
       --stats        Show timing
-  -h, --help         Print help
-  -V, --version      Print version
+
+dsk watch [PATH]
+  -e, --exclude      Exclude patterns
+
+dsk service <install|uninstall|start|stop|status>
 ```
 
 ## License
