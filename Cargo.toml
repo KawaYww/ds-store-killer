@@ -1,0 +1,30 @@
+[package]
+name = "ds-store-killer"
+version = "0.1.0"
+edition = "2024"
+description = "Fast CLI to kill .DS_Store files with watch mode and launchd integration"
+license = "MIT"
+repository = "https://github.com/kawayww/ds-store-killer"
+keywords = ["macos", "ds-store", "cleanup", "cli", "daemon"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "dsk"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
+
+[dependencies]
+jwalk = "0.8"
+clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
+notify = { version = "7", default-features = false, features = ["macos_kqueue"] }
+colored = { version = "2", default-features = false }
+shellexpand = { version = "3", default-features = false, features = ["base-0", "tilde"] }
+
+[dev-dependencies]
+tempfile = "3"
