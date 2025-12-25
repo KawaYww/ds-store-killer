@@ -45,21 +45,43 @@ fn main() {
         return;
     }
 
-    // Scan for .DS_Store files
-    let files = killer::scan(&path, cli.recursive, &cli.exclude);
+    let opts = KillOptions {
+        dry_run: cli.dry_run,
+        quiet: cli.quiet,
+    };
+
+    // Fast path: -y flag means streaming mode (no confirmation needed)
+    if cli.yes {
+        let result = killer::kill_streaming(&path, cli.recursive, &cli.exclude, &opts);
+
+        if result.found == 0 {
+            log::info("No .DS_Store files found");
+        } else if cli.dry_run {
+            log::info(&format!("Dry-run: {} file(s) would be deleted", result.found));
+        } else {
+            log::ok(&format!("Deleted {} .DS_Store file(s)", result.deleted));
+        }
+
+        if cli.stats {
+            println!("  Time: {:?}", result.duration);
+        }
+        return;
+    }
+
+    // Interactive path: scan first (streaming output), then confirm
+    log::info("Scanning for .DS_Store files...");
+    let mut files = Vec::new();
+    killer::scan_streaming(&path, cli.recursive, &cli.exclude, |p| {
+        log::found(p);
+        files.push(p.to_path_buf());
+    });
 
     if files.is_empty() {
         log::info("No .DS_Store files found");
         return;
     }
 
-    // Show what will be deleted (unless quiet)
-    if !cli.quiet && !cli.yes {
-        log::info(&format!("Found {} .DS_Store file(s):", files.len()));
-        for f in &files {
-            println!("  {}", f.display());
-        }
-    }
+    log::info(&format!("Found {} file(s)", files.len()));
 
     // Dry-run mode
     if cli.dry_run {
@@ -67,25 +89,20 @@ fn main() {
         return;
     }
 
-    // Confirm unless -y flag
-    if !cli.yes && !confirm("Delete these files?") {
+    // Confirm
+    if !confirm("Delete these files?") {
         log::info("Cancelled");
         return;
     }
 
-    // Kill
-    let opts = KillOptions {
+    // Kill collected files
+    let result = killer::kill_files(&files, &KillOptions {
         dry_run: false,
-        quiet: cli.quiet,
-    };
-    let result = killer::kill(&files, &opts);
+        quiet: true, // already shown during scan
+    });
 
-    // Output result
-    if result.deleted > 0 {
-        log::ok(&format!("Deleted {} .DS_Store file(s)", result.deleted));
-    }
+    log::ok(&format!("Deleted {} .DS_Store file(s)", result.deleted));
 
-    // Stats
     if cli.stats {
         println!("  Time: {:?}", result.duration);
     }

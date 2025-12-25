@@ -4,13 +4,13 @@ use crate::{consts::TARGET_FILE, log};
 use jwalk::WalkDir;
 use std::{
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 
 /// Options controlling kill behavior
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KillOptions {
     pub dry_run: bool,
     pub quiet: bool,
@@ -48,32 +48,102 @@ pub fn is_excluded(path: &Path, excludes: &[String]) -> bool {
     excludes.iter().any(|p| s.contains(p))
 }
 
-/// Scan directory and return list of target files
-pub fn scan(dir: &Path, recursive: bool, excludes: &[String]) -> Vec<std::path::PathBuf> {
-    let mut found = Vec::new();
+/// Streaming scan - finds files and calls callback for each one immediately
+pub fn scan_streaming<F>(dir: &Path, recursive: bool, excludes: &[String], mut callback: F) -> usize
+where
+    F: FnMut(&Path),
+{
+    let mut count = 0;
 
     if recursive {
-        for entry in WalkDir::new(dir).into_iter().filter_map(Result::ok) {
+        // CRITICAL: skip_hidden(false) to include .DS_Store files!
+        for entry in WalkDir::new(dir)
+            .skip_hidden(false)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             let path = entry.path();
             if is_target(&path) && !is_excluded(&path, excludes) {
-                found.push(path);
+                callback(&path);
+                count += 1;
             }
         }
     } else {
         let target = dir.join(TARGET_FILE);
         if target.exists() && !is_excluded(&target, excludes) {
-            found.push(target);
+            callback(&target);
+            count += 1;
         }
     }
 
-    found
+    count
 }
 
-/// Kill target files with given options
-pub fn kill(files: &[std::path::PathBuf], opts: &KillOptions) -> KillResult {
+/// Streaming kill - find and delete files as they're discovered
+pub fn kill_streaming(
+    dir: &Path,
+    recursive: bool,
+    excludes: &[String],
+    opts: &KillOptions,
+) -> KillResult {
+    let start = Instant::now();
+    let found = AtomicUsize::new(0);
+    let deleted = AtomicUsize::new(0);
+
+    if recursive {
+        for entry in WalkDir::new(dir)
+            .skip_hidden(false)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
+            let path = entry.path();
+            if is_target(&path) && !is_excluded(&path, excludes) {
+                found.fetch_add(1, Ordering::Relaxed);
+
+                if !opts.quiet {
+                    if opts.dry_run {
+                        log::dry(&path);
+                    } else {
+                        log::kill(&path);
+                    }
+                }
+
+                if !opts.dry_run && fs::remove_file(&path).is_ok() {
+                    deleted.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+    } else {
+        let target = dir.join(TARGET_FILE);
+        if target.exists() && !is_excluded(&target, excludes) {
+            found.fetch_add(1, Ordering::Relaxed);
+
+            if !opts.quiet {
+                if opts.dry_run {
+                    log::dry(&target);
+                } else {
+                    log::kill(&target);
+                }
+            }
+
+            if !opts.dry_run && fs::remove_file(&target).is_ok() {
+                deleted.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    KillResult {
+        found: found.load(Ordering::Relaxed),
+        deleted: if opts.dry_run { 0 } else { deleted.load(Ordering::Relaxed) },
+        duration: start.elapsed(),
+    }
+}
+
+/// Kill a specific list of files
+pub fn kill_files(files: &[PathBuf], opts: &KillOptions) -> KillResult {
     let start = Instant::now();
     let found = files.len();
-    let deleted = AtomicUsize::new(0);
+    let mut deleted = 0;
 
     for path in files {
         if !opts.quiet {
@@ -84,18 +154,14 @@ pub fn kill(files: &[std::path::PathBuf], opts: &KillOptions) -> KillResult {
             }
         }
 
-        if !opts.dry_run {
-            if fs::remove_file(path).is_ok() {
-                deleted.fetch_add(1, Ordering::Relaxed);
-            }
+        if !opts.dry_run && fs::remove_file(path).is_ok() {
+            deleted += 1;
         }
     }
 
-    let deleted_count = if opts.dry_run { 0 } else { deleted.load(Ordering::Relaxed) };
-
     KillResult {
         found,
-        deleted: deleted_count,
+        deleted: if opts.dry_run { 0 } else { deleted },
         duration: start.elapsed(),
     }
 }

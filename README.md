@@ -1,161 +1,112 @@
 # dsk
 
-> Kill those pesky `.DS_Store` files on macOS
-> ?
 > F**king .DS_Store ! ! ! ! !
+> ?
+> Kill those pesky `.DS_Store` files on macOS
 
-**macOS users only** — because only Apple sprinkles these mysterious little files everywhere in your projects. Linux/Windows folks, congrats on not having to deal with this nonsense.
-
-A fast, minimal CLI tool to eliminate the annoying `.DS_Store` files that macOS sh*ts everywhere.
+**macOS only** — Linux/Windows folks, you don't have to deal with this crap.
 
 ## Features
 
-- **Interactive confirmation** - Review files before deletion (use `-y` to skip)
-- **Dry-run mode** - Preview what would be deleted without removing anything
-- **Single/Recursive deletion** - Clean up one directory or an entire tree
-- **Daemon mode** - Watch directories and auto-delete new `.DS_Store` files
-- **launchd integration** - Run as a background service on boot
-- **Exclude patterns** - Skip directories like `node_modules` or `.git`
-- **Parallel traversal** - Uses `jwalk` (rayon-based) for blazing fast scanning
+- Interactive confirmation (or `-y` to skip)
+- Dry-run mode (`-n`)
+- Git safety — skips tracked files by default, `--force` to override
+- Recursive or single-dir
+- Daemon mode with `--serve`
+- launchd service for auto-start on boot
+- Exclude patterns (`-e node_modules -e .git`)
+- Fast parallel scanning via `jwalk`
 
-## Installation
-
-### From crates.io
+## Install
 
 ```bash
 cargo install ds-store-killer
 ```
 
-### For Nix users
-
-> Nix users might be the only ones installing this on non-macOS systems — but remember, this tool is pretty useless on Linux.
-
-
+Nix users:
 ```bash
-# Run directly
 nix run github:kawayww/ds-store-killer
 
-# Add to flake inputs
+# or add to flake
 {
   inputs.dsk.url = "github:kawayww/ds-store-killer";
 }
-
-# Use in darwin-configuration
-environment.systemPackages = [ inputs.dsk.packages.${system}.default ];
 ```
 
-### Build from source
-
+Build from source:
 ```bash
 git clone https://github.com/kawayww/ds-store-killer
 cd ds-store-killer
 cargo build --release
-cp target/release/dsk ~/.local/bin/
 ```
 
 ## Usage
 
 ```bash
-# Delete .DS_Store in current directory (with confirmation)
-dsk
-
-# Delete without asking
-dsk -y
-
-# Preview what would be deleted (dry-run)
-dsk -n
-
-# Recursive deletion
-dsk -ry ~/Projects
-
-# Exclude specific directories
-dsk -ry . -e node_modules -e .git
-
-# Quiet mode (no file listing)
-dsk -ryq .
-
-# Show execution statistics
-dsk -ry --stats ~/Projects
+dsk                      # current dir, asks before deleting
+dsk -y                   # just delete, don't ask
+dsk -n                   # dry-run, scan only
+dsk -r ~/Projects        # recursive
+dsk -r --force ~/repo    # include git-tracked files
+dsk -ry --stats .        # recursive, no confirm, show timing
+dsk -ry -e node_modules  # exclude pattern
+dsk --serve ~/Desktop    # daemon, auto-kill new ones
 ```
 
-## Daemon Mode (`--serve`)
+## Git Safety
 
-Watch a directory and automatically delete any new `.DS_Store` files as they're created:
+Deleting git-tracked `.DS_Store` messes up your commit history. By default, `dsk` skips them.
+
+| Mode | Behavior |
+|------|----------|
+| Default | Skips git-tracked files |
+| `--force` | Includes them (still asks for confirmation) |
 
 ```bash
-# Watch current directory
-dsk --serve
-
-# Watch a specific directory
-dsk --serve ~/Desktop
-
-# Watch with exclusions
-dsk --serve ~/Projects -e node_modules -e .git
+dsk -r ~/my-repo           # skips tracked files
+dsk -r --force ~/my-repo   # includes them, still confirms
+dsk -ry --force ~/my-repo  # includes them, no confirmation
 ```
 
-The daemon runs in the foreground and monitors the directory **recursively**. Press `Ctrl+C` to stop.
+Why would `.DS_Store` be tracked?
+- Someone forgot `.gitignore`
+- Force-added with `git add -f`
+- `.gitignore` was added after the fact
 
-> **Note**: Currently `--serve` only accepts a single path. For watching multiple directories, use the launchd service instead.
+## Cache
+
+Non-recursive scans are cached in `$TMPDIR/dsk-cache/`. Auto-invalidates when directory changes.
+
+Recursive mode doesn't cache — can't reliably detect subdirectory changes, so we rescan every time.
+
+## Daemon Mode
+
+Watch directories and auto-delete new `.DS_Store` as they appear:
+
+```bash
+dsk --serve              # current dir
+dsk --serve ~/Desktop    # specific dir
+dsk --serve . -e .git    # with exclusions
+```
+
+Runs in foreground, Ctrl+C to stop.
 
 ## launchd Service
 
-For persistent background monitoring that survives reboots, use the launchd service:
-
-### Service Commands
-
-| Command | Description |
-|---------|-------------|
-| `dsk service install [PATHS...]` | Create launchd plist with specified watch paths |
-| `dsk service uninstall` | Remove plist and stop service |
-| `dsk service start` | Load and start the service |
-| `dsk service stop` | Unload and stop the service |
-| `dsk service status` | Show service status and log locations |
-
-### Examples
+For background monitoring that survives reboots:
 
 ```bash
-# Install service to watch home directory (default)
-dsk service install
-
-# Install service to watch specific directories
-dsk service install ~/Desktop ~/Downloads
-
-# Install service to watch multiple project directories
-dsk service install ~ ~/Projects ~/Documents
-
-# Start the service after installation
+dsk service install                       # watch ~ by default
+dsk service install ~/Desktop ~/Projects  # multi-path
 dsk service start
-
-# Check if it's running
 dsk service status
-
-# View logs
-tail -f /tmp/dsk.out.log
-
-# Stop and remove
 dsk service stop
 dsk service uninstall
 ```
 
-### Multi-Path Monitoring
+Uses kqueue — watching 10 dirs costs the same as watching 1.
 
-`dsk service install` accepts **multiple paths** as arguments. All paths are monitored by a single service process using the kqueue event mechanism:
-
-- **Performance**: kqueue is event-based, not polling. Watching 10 directories has the same CPU overhead as watching 1.
-- **Single process**: One background process handles all paths, minimal memory footprint.
-- **Recursive**: Each path is monitored recursively, including all subdirectories.
-
-### How It Works
-
-1. `install` creates a launchd plist at `~/Library/LaunchAgents/com.dsk.guard.plist`
-2. `start` loads the plist, launching `dsk --serve` with all configured paths
-3. The service runs with `KeepAlive=true`, restarting automatically if it crashes
-4. `RunAtLoad=true` ensures it starts on every login
-
-### Logs
-
-- **stdout**: `/tmp/dsk.out.log` — normal operation logs
-- **stderr**: `/tmp/dsk.err.log` — errors and warnings
+Logs: `/tmp/dsk.out.log`, `/tmp/dsk.err.log`
 
 ## CLI Reference
 
@@ -169,35 +120,18 @@ Arguments:
   [PATH]  Target directory [default: .]
 
 Options:
-  -r, --recursive          Recursive deletion
-      --serve              Daemon mode: watch and auto-delete
-  -e, --exclude <PATTERN>  Exclude patterns
-  -y, --yes                Skip confirmation, delete directly
-  -n, --dry-run            Dry-run: scan only, don't delete
-  -q, --quiet              Quiet mode: suppress file listing
-      --stats              Show execution statistics
-  -h, --help               Print help
-  -V, --version            Print version
+  -r, --recursive    Recursive deletion
+  -y, --yes          Skip confirmation
+  -n, --dry-run      Scan only, don't delete
+  -q, --quiet        Don't list each file
+  -e, --exclude      Exclude patterns
+      --force        Allow deleting git-tracked files
+      --serve        Daemon mode
+      --stats        Show timing
+  -h, --help         Print help
+  -V, --version      Print version
 ```
-
-### Service Subcommands
-
-```
-Usage: dsk service <COMMAND>
-
-Commands:
-  install    Install launchd plist [PATHS...]
-  uninstall  Uninstall launchd plist
-  start      Start service
-  stop       Stop service
-  status     Show status
-```
-
-## Performance
-
-`dsk` uses [jwalk](https://crates.io/crates/jwalk) for directory traversal. jwalk leverages rayon internally for parallel processing, making it 2-4x faster than `walkdir` + `rayon` for deeply nested directories.
 
 ## License
 
-[MIT](LICENSE)
-
+MIT
