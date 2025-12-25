@@ -39,26 +39,7 @@ pub fn run(paths: &[&Path], mut excludes: Vec<String>, notify: bool, force: bool
         }
     }
 
-    // Initial scan and cleanup
-    log::watch("Performing initial cleanup...");
-
-    for p in paths {
-        crate::killer::scan_streaming(p, true, &excludes, |path| {
-            // Check git safety mechanism
-            if !force && crate::git::is_available() && crate::git::is_git_tracked(path) {
-                log::warn(&format!("Skipping git-tracked file: {}", path.display()));
-                return;
-            }
-
-            log::kill(path);
-            if let Err(e) = fs::remove_file(path) {
-                log::warn(&format!("Failed to remove: {}", e));
-            } else if notify {
-                send_notification("dsk", &format!("Killed {}", path.display()));
-            }
-        });
-    }
-
+    // 1. Initialize watcher first to capture all events
     let (tx, rx) = channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())
         .map_err(|e| e.to_string())?;
@@ -71,6 +52,30 @@ pub fn run(paths: &[&Path], mut excludes: Vec<String>, notify: bool, force: bool
     for p in paths {
         println!("  {}", p.display());
     }
+
+    // 2. Perform initial scan (any events during this will be buffered in channel)
+    log::watch("Performing initial cleanup...");
+
+    for p in paths {
+        crate::killer::scan_streaming(p, true, &excludes, |path| {
+            // Check git safety mechanism
+            if !force && crate::git::is_available() && crate::git::is_git_tracked(path) {
+                log::warn(&format!("Skipping git-tracked file: {}", path.display()));
+                return;
+            }
+
+            log::kill(path);
+            if let Err(e) = fs::remove_file(path) {
+                // Ignore "NotFound" - might have been deleted by watcher or race
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn(&format!("Failed to remove: {}", e));
+                }
+            } else if notify {
+                send_notification("dsk", &format!("Killed {}", path.display()));
+            }
+        });
+    }
+
     println!("Press Ctrl+C to stop.");
 
     loop {
