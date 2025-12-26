@@ -2,19 +2,30 @@
 
 use colored::Colorize;
 use std::path::Path;
+use shellexpand;
+
+/// Shorten path by replacing home directory with ~
+pub fn shorten_path(path: &Path) -> String {
+    let home = shellexpand::tilde("~").to_string();
+    let path_str = path.to_string_lossy();
+
+    if path_str.starts_with(&home) {
+        format!("~{}", &path_str[home.len()..])
+    } else {
+        path_str.to_string()
+    }
+}
 
 /// Format path with filename highlighted in light red
 #[inline]
 fn format_path(path: &Path) -> String {
-    match (path.parent(), path.file_name()) {
-        (Some(parent), Some(name)) if !parent.as_os_str().is_empty() => {
-            format!(
-                "{}/{}",
-                parent.display(),
-                name.to_string_lossy().truecolor(255, 100, 100) // light red
-            )
-        }
-        _ => path.display().to_string().truecolor(255, 100, 100).to_string(),
+    let short = shorten_path(path);
+    // Find last / to highlight filename
+    if let Some(pos) = short.rfind('/') {
+        let (parent, name) = short.split_at(pos + 1);
+        format!("{}{}", parent, name.truecolor(255, 100, 100))
+    } else {
+        short.truecolor(255, 100, 100).to_string()
     }
 }
 

@@ -33,6 +33,27 @@ nix run github:kawayww/ds-store-killer
 }
 ```
 
+**nix-darwin** (declarative service):
+```nix
+# flake.nix
+{
+  inputs.dsk.url = "github:kawayww/ds-store-killer";
+}
+
+# darwin-configuration.nix
+{ inputs, ... }: {
+  imports = [ inputs.dsk.darwinModules.default ];
+
+  services.dsk = {
+    enable = true;
+    paths = [ "~/Downloads" "~/Projects" ]; # directories to watch recursively (default: ~)
+    notify = true;           # optional: macOS notifications
+    # force = true;          # optional: delete git-tracked files (DANGER)
+    # exclude = [ ".git" ];  # optional: exclude patterns
+  };
+}
+```
+
 Build from source:
 ```bash
 git clone https://github.com/kawayww/ds-store-killer

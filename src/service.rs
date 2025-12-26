@@ -39,6 +39,15 @@ fn generate_plist(exe: &str, paths: &[String], args: &crate::cli::WatchSharedArg
 
     let args_xml = cmd_args.join("\n        ");
 
+    // Only require Aqua session if notifications are enabled
+    let session_xml = if args.notify {
+        r#"    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+"#
+    } else {
+        ""
+    };
+
     format!(
 r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -55,7 +64,7 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>StandardOutPath</key>
+{session_xml}    <key>StandardOutPath</key>
     <string>{LOG_STDOUT}</string>
     <key>StandardErrorPath</key>
     <string>{LOG_STDERR}</string>
@@ -83,12 +92,21 @@ pub fn install(paths: &[String], args: &crate::cli::WatchSharedArgs) -> Result<(
         .and_then(|mut f| f.write_all(content.as_bytes()))
         .map_err(|e| e.to_string())?;
 
-    log::ok(&format!("Installed plist to: {}", plist.display()));
-    for p in &watch {
-        println!("  - {}", expand(p));
+    log::ok("Service installed:");
+    println!("  Plist: {}", log::shorten_path(&plist));
+    println!("  Watch: {}", watch.iter().map(|p| expand(p)).collect::<Vec<_>>().join(", "));
+
+    let mut opts = Vec::new();
+    if args.notify { opts.push("notify".to_string()); }
+    if args.force { opts.push("force".to_string()); }
+    if !args.exclude.is_empty() {
+        opts.push(format!("exclude: {}", args.exclude.join(",")));
     }
-    if args.notify { println!("  - Notifications enabled"); }
-    if args.force { println!("  - Force delete enabled (DANGER)"); }
+    if !opts.is_empty() {
+        println!("  Options: {}", opts.join(", "));
+    }
+
+    log::info("Run 'dsk service start' to activate");
     Ok(())
 }
 
@@ -98,9 +116,9 @@ pub fn uninstall() -> Result<(), String> {
 
     if plist.exists() {
         fs::remove_file(&plist).map_err(|e| e.to_string())?;
-        log::ok(&format!("Uninstalled: {}", plist.display()));
+        log::ok(&format!("Uninstalled: {}", log::shorten_path(&plist)));
     } else {
-        log::info(&format!("Not installed: {}", plist.display()));
+        log::info(&format!("Not installed: {}", log::shorten_path(&plist)));
     }
     Ok(())
 }
@@ -159,7 +177,7 @@ pub fn status() -> Result<(), String> {
     let plist = plist_path();
 
     println!("Service:   {}", SERVICE_ID);
-    println!("Plist:     {}", plist.display());
+    println!("Plist:     {}", log::shorten_path(&plist));
     println!("Installed: {}", if plist.exists() { "Yes" } else { "No" });
 
     let out = Command::new("launchctl")

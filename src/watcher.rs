@@ -35,7 +35,7 @@ fn try_delete(path: &Path, force: bool, notify: bool) -> bool {
     match fs::remove_file(path) {
         Ok(()) => {
             if notify {
-                send_notification(&format!("Killed {}", path.display()));
+                send_notification(&format!("Killed {}", log::shorten_path(path)));
             }
             true
         }
