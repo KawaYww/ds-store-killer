@@ -52,17 +52,9 @@ pub struct WatchArgs {
     #[arg(default_value = ".")]
     pub path: PathBuf,
 
-    /// Exclude patterns
-    #[arg(short, long)]
-    pub exclude: Vec<String>,
-
-    /// Send macOS notification on delete
-    #[arg(long)]
-    pub notify: bool,
-
-    /// Force delete git-tracked .DS_Store files
-    #[arg(long)]
-    pub force: bool,
+    /// Shared watch options
+    #[command(flatten)]
+    pub options: WatchSharedArgs,
 }
 
 #[derive(Subcommand)]
@@ -122,28 +114,4 @@ pub struct WatchSharedArgs {
     /// Force delete git-tracked .DS_Store files
     #[arg(long)]
     pub force: bool,
-}
-
-    /// Manage launchd service
-    Service {
-        #[command(subcommand)]
-        action: ServiceAction,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ServiceAction {
-    /// Install launchd plist
-    Install {
-        #[arg(default_value = "~")]
-        paths: Vec<String>,
-    },
-    /// Uninstall launchd plist
-    Uninstall,
-    /// Start service
-    Start,
-    /// Stop service
-    Stop,
-    /// Show status
-    Status,
 }

@@ -88,10 +88,11 @@ Recursive mode doesn't cache — can't reliably detect subdirectory changes, so 
 Watch directories and auto-delete `.DS_Store` files instantly.
 
 **Behavior:**
-1. **Initial Scan**: Performs a full scan and cleanup on startup.
-2. **Real-time**: Uses macOS FSEvents to monitor changes efficiently.
-3. **Non-interactive**: Automatically deletes files without asking.
-4. **Git Safety**:
+1. **Recursive**: Monitors all subdirectories automatically (no `-r` flag needed).
+2. **Initial Scan**: Performs a full recursive scan and cleanup on startup.
+3. **Real-time**: Uses macOS FSEvents to monitor changes efficiently.
+4. **Non-interactive**: Automatically deletes files without asking.
+5. **Git Safety**:
     - **Default**: Skips git-tracked `.DS_Store` files (logs a warning).
     - **`--force`**: Auto-deletes **ALL** `.DS_Store` files, including git-tracked ones.
 
@@ -114,6 +115,9 @@ For background monitoring that survives reboots:
 ```bash
 dsk service install                       # watch ~ by default
 dsk service install ~/Desktop ~/Projects  # multi-path
+dsk service install --notify              # enable notifications
+dsk service install --force               # (DANGER) delete git-tracked files
+dsk service install -e Downloads          # exclude patterns
 dsk service start
 dsk service status
 dsk service stop
@@ -147,9 +151,14 @@ dsk kill [OPTIONS] [PATH]
 dsk watch [PATH]
   -e, --exclude      Exclude patterns
       --notify       Send macOS notification on delete
-      --force        Wait mode: Delete git-tracked .DS_Store files too
+      --force        (DANGER) Auto-delete git-tracked .DS_Store files
 
-dsk service <install|uninstall|start|stop|status>
+dsk service install [PATHS...] [OPTIONS]
+  -e, --exclude      Exclude patterns (persisted in plist)
+      --notify       Enable macOS notifications
+      --force        (DANGER) Delete git-tracked .DS_Store files
+
+dsk service <uninstall|start|stop|status>
 ```
 
 ## License

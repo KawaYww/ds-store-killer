@@ -15,12 +15,29 @@ fn expand(path: &str) -> String {
     shellexpand::tilde(path).to_string()
 }
 
-fn generate_plist(exe: &str, paths: &[String]) -> String {
-    let args: String = paths
-        .iter()
-        .map(|p| format!("        <string>{}</string>", expand(p)))
-        .collect::<Vec<_>>()
-        .join("\n");
+fn generate_plist(exe: &str, paths: &[String], args: &crate::cli::WatchSharedArgs) -> String {
+    let mut flags = Vec::new();
+    if args.notify { flags.push("--notify".to_string()); }
+    if args.force { flags.push("--force".to_string()); }
+    for ex in &args.exclude {
+        flags.push("-e".to_string());
+        flags.push(ex.clone());
+    }
+
+    // Note: Use 'watch' subcommand instead of deprecated --serve
+    let mut cmd_args = vec![
+        "<string>watch</string>".to_string(),
+    ];
+
+    for flag in flags {
+        cmd_args.push(format!("<string>{}</string>", flag));
+    }
+
+    for p in paths {
+        cmd_args.push(format!("<string>{}</string>", expand(p)));
+    }
+
+    let args_xml = cmd_args.join("\n        ");
 
     format!(
 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -32,8 +49,7 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
     <key>ProgramArguments</key>
     <array>
         <string>{exe}</string>
-        <string>--serve</string>
-{args}
+        {args_xml}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -48,7 +64,7 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
 "#)
 }
 
-pub fn install(paths: &[String]) -> Result<(), String> {
+pub fn install(paths: &[String], args: &crate::cli::WatchSharedArgs) -> Result<(), String> {
     let exe = env::current_exe().map_err(|e| e.to_string())?;
     let plist = plist_path();
 
@@ -62,7 +78,7 @@ pub fn install(paths: &[String]) -> Result<(), String> {
         paths.to_vec()
     };
 
-    let content = generate_plist(&exe.to_string_lossy(), &watch);
+    let content = generate_plist(&exe.to_string_lossy(), &watch, args);
     fs::File::create(&plist)
         .and_then(|mut f| f.write_all(content.as_bytes()))
         .map_err(|e| e.to_string())?;
@@ -71,6 +87,8 @@ pub fn install(paths: &[String]) -> Result<(), String> {
     for p in &watch {
         println!("  - {}", expand(p));
     }
+    if args.notify { println!("  - Notifications enabled"); }
+    if args.force { println!("  - Force delete enabled (DANGER)"); }
     Ok(())
 }
 
@@ -168,8 +186,14 @@ mod tests {
 
     #[test]
     fn test_plist_content() {
-        let plist = generate_plist("/bin/dsk", &["~".into()]);
+        let args = crate::cli::WatchSharedArgs {
+            exclude: vec![],
+            notify: false,
+            force: false,
+        };
+        let plist = generate_plist("/bin/dsk", &["~".into()], &args);
         assert!(plist.contains(SERVICE_ID));
-        assert!(plist.contains("--serve"));
+        assert!(plist.contains("watch"));
+        assert!(!plist.contains("--serve"));
     }
 }

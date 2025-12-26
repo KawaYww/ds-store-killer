@@ -8,7 +8,7 @@ mod service;
 mod watcher;
 
 use clap::Parser;
-use cli::{Cli, Commands, KillArgs, ServiceAction};
+use cli::{Cli, Commands, KillArgs, ServiceAction, WatchArgs};
 use killer::KillOptions;
 use std::{io::{self, Write}, path::Path};
 
@@ -17,7 +17,7 @@ fn main() {
 
     match cli.command {
         Commands::Kill { args } => run_kill(args),
-        Commands::Watch { path, exclude, notify, force } => run_watch(&path, exclude, notify, force),
+        Commands::Watch { args } => run_watch(&args),
         Commands::Service { action } => run_service(action),
     }
 }
@@ -139,8 +139,8 @@ fn run_kill(args: KillArgs) {
     }
 }
 
-fn run_watch(path: &std::path::Path, exclude: Vec<String>, notify: bool, force: bool) {
-    let path = shellexpand::tilde(&path.to_string_lossy()).to_string();
+fn run_watch(args: &WatchArgs) {
+    let path = shellexpand::tilde(&args.path.to_string_lossy()).to_string();
     let path = Path::new(&path);
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
@@ -149,7 +149,12 @@ fn run_watch(path: &std::path::Path, exclude: Vec<String>, notify: bool, force: 
         std::process::exit(1);
     }
 
-    if let Err(e) = watcher::run(&[path.as_path()], exclude, notify, force) {
+    if let Err(e) = watcher::run(
+        &[path.as_path()],
+        args.options.exclude.clone(),
+        args.options.notify,
+        args.options.force,
+    ) {
         log::error(&e);
         std::process::exit(1);
     }
@@ -157,7 +162,7 @@ fn run_watch(path: &std::path::Path, exclude: Vec<String>, notify: bool, force: 
 
 fn run_service(action: ServiceAction) {
     let result = match action {
-        ServiceAction::Install { paths } => service::install(&paths),
+        ServiceAction::Install { paths, watch_args } => service::install(&paths, &watch_args),
         ServiceAction::Uninstall => service::uninstall(),
         ServiceAction::Start => service::start(),
         ServiceAction::Stop => service::stop(),
