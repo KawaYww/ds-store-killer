@@ -45,6 +45,26 @@ pub struct KillArgs {
     pub force: bool,
 }
 
+/// Arguments for watch command
+#[derive(clap::Args, Clone)]
+pub struct WatchArgs {
+    /// Target directory
+    #[arg(default_value = ".")]
+    pub path: PathBuf,
+
+    /// Exclude patterns
+    #[arg(short, long)]
+    pub exclude: Vec<String>,
+
+    /// Send macOS notification on delete
+    #[arg(long)]
+    pub notify: bool,
+
+    /// Force delete git-tracked .DS_Store files
+    #[arg(long)]
+    pub force: bool,
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Kill .DS_Store files (default command)
@@ -56,22 +76,53 @@ pub enum Commands {
 
     /// Watch directory and auto-delete .DS_Store files
     Watch {
-        /// Target directory
-        #[arg(default_value = ".")]
-        path: PathBuf,
-
-        /// Exclude patterns
-        #[arg(short, long)]
-        exclude: Vec<String>,
-
-        /// Send macOS notification on delete
-        #[arg(long)]
-        notify: bool,
-
-        /// Force delete git-tracked .DS_Store files
-        #[arg(long)]
-        force: bool,
+        #[command(flatten)]
+        args: WatchArgs,
     },
+
+    /// Manage launchd service
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServiceAction {
+    /// Install launchd plist
+    Install {
+        /// Directories to watch
+        #[arg(default_value = "~")]
+        paths: Vec<String>,
+
+        #[command(flatten)]
+        watch_args: WatchSharedArgs,
+    },
+    /// Uninstall launchd plist
+    Uninstall,
+    /// Start service
+    Start,
+    /// Stop service
+    Stop,
+    /// Show status
+    Status,
+}
+
+/// Arguments shared between Watch command and Service Install
+#[derive(clap::Args, Clone)]
+pub struct WatchSharedArgs {
+    /// Exclude patterns
+    #[arg(short, long)]
+    pub exclude: Vec<String>,
+
+    /// Send macOS notification on delete
+    #[arg(long)]
+    pub notify: bool,
+
+    /// Force delete git-tracked .DS_Store files
+    #[arg(long)]
+    pub force: bool,
+}
 
     /// Manage launchd service
     Service {

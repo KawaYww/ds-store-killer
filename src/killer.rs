@@ -197,4 +197,62 @@ mod tests {
         let r = KillResult { found: 5, deleted: 5, duration: Duration::ZERO };
         assert_eq!(r.to_string(), "Deleted 5 .DS_Store file(s)");
     }
+
+    #[test]
+    fn test_scan_and_kill() {
+        use std::fs::File;
+        use tempfile::TempDir;
+
+        let dir = TempDir::new().unwrap();
+        let path = dir.path();
+
+        // Create nested structure
+        // /root
+        //   .DS_Store
+        //   subdir/
+        //     .DS_Store
+        //     nested.txt
+        //   node_modules/
+        //     .DS_Store (should exclude)
+
+        File::create(path.join(TARGET_FILE)).unwrap();
+
+        let subdir = path.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        File::create(subdir.join(TARGET_FILE)).unwrap();
+        File::create(subdir.join("nested.txt")).unwrap();
+
+        let node_modules = path.join("node_modules");
+        fs::create_dir(&node_modules).unwrap();
+        File::create(node_modules.join(TARGET_FILE)).unwrap();
+
+        let excludes = vec!["node_modules".to_string()];
+
+        // Test scan (recursive)
+        let mut found = Vec::new();
+        let count = scan_streaming(path, true, &excludes, |p| found.push(p.to_path_buf()));
+
+        assert_eq!(count, 2, "Should find 2 .DS_Store files (root + subdir)");
+        assert!(found.iter().any(|p| p.parent().unwrap() == path));
+        assert!(found.iter().any(|p| p.parent().unwrap() == subdir));
+        assert!(!found.iter().any(|p| p.parent().unwrap() == node_modules));
+
+        // Test kill dry-run
+        let opts = KillOptions { dry_run: true, quiet: true };
+        let result = kill_streaming(path, true, &excludes, &opts);
+
+        assert_eq!(result.found, 2);
+        assert_eq!(result.deleted, 0);
+        assert!(path.join(TARGET_FILE).exists(), "Dry-run should not delete");
+
+        // Test kill actual
+        let opts = KillOptions { dry_run: false, quiet: true };
+        let result = kill_streaming(path, true, &excludes, &opts);
+
+        assert_eq!(result.found, 2);
+        assert_eq!(result.deleted, 2);
+        assert!(!path.join(TARGET_FILE).exists(), "Should be deleted");
+        assert!(!subdir.join(TARGET_FILE).exists(), "Should be deleted");
+        assert!(node_modules.join(TARGET_FILE).exists(), "Excluded should remain");
+    }
 }

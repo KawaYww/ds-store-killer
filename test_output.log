@@ -1,0 +1,18 @@
+   Compiling ds-store-killer v0.2.0 (/Users/kawayww/proj/ds-store-killer)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.91s
+     Running unittests src/main.rs (target/debug/deps/dsk-cacebc7c0a046bf5)
+
+running 10 tests
+test killer::tests::test_is_target ... ok
+test killer::tests::test_is_excluded ... ok
+test killer::tests::test_kill_result_display ... ok
+test service::tests::test_expand ... ok
+test service::tests::test_plist_content ... ok
+test cache::tests::test_cache_file_verification ... ok
+test cache::tests::test_cache_save_and_load ... ok
+test killer::tests::test_scan_and_kill ... ok
+test git::tests::test_is_git_tracked ... ok
+test cache::tests::test_cache_invalidation_mtime ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+

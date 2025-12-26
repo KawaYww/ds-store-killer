@@ -128,8 +128,85 @@ pub fn load_verified(dir: &Path, recursive: bool) -> Option<Vec<PathBuf>> {
     Some(verified)
 }
 
-/// Invalidate cache for a directory
 pub fn invalidate(dir: &Path, recursive: bool) {
     let path = cache_path(dir, recursive);
     let _ = fs::remove_file(path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::thread;
+    use std::fs::File;
+
+    #[test]
+    fn test_cache_save_and_load() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path();
+
+        // Create some files
+        let f1 = path.join("f1");
+        let f2 = path.join("f2");
+        File::create(&f1).unwrap();
+        File::create(&f2).unwrap();
+
+        // Save to cache
+        save(path, false, &[f1.clone(), f2.clone()]);
+
+        // Load correct
+        let found = load_verified(path, false).expect("Should load cache");
+        assert_eq!(found.len(), 2);
+        assert!(found.contains(&f1));
+        assert!(found.contains(&f2));
+
+        // Recursive should not load
+        save(path, true, &[f1.clone()]);
+        assert!(load_verified(path, true).is_none(), "Recursive cache should return None");
+    }
+
+    #[test]
+    fn test_cache_invalidation_mtime() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path();
+
+        // Initial setup
+        let f1 = path.join("f1");
+        File::create(&f1).unwrap();
+        save(path, false, &[f1.clone()]);
+
+        // Verify loaded
+        assert!(load_verified(path, false).is_some());
+
+        // Wait to ensure mtime changes (file systems have resolution limits)
+        thread::sleep(Duration::from_millis(1100));
+
+        // Modify directory (create a new file)
+        let f2 = path.join("f2");
+        File::create(&f2).unwrap();
+
+        // Should return None due to mtime mismatch
+        assert!(load_verified(path, false).is_none(), "Cache should invalidate on dir change");
+    }
+
+    #[test]
+    fn test_cache_file_verification() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path();
+
+        let f1 = path.join("f1");
+        let f2 = path.join("f2");
+        File::create(&f1).unwrap();
+        File::create(&f2).unwrap();
+
+        save(path, false, &[f1.clone(), f2.clone()]);
+
+        // Delete one file
+        fs::remove_file(&f2).unwrap();
+
+        // Load should only return existing files
+        let found = load_verified(path, false).expect("Should load");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0], f1);
+    }
 }
